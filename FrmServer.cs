@@ -12,6 +12,7 @@ namespace CocaroServer
     {
         TcpListener server;
         List<TcpClient> clients = new List<TcpClient>();
+        DateTime TimeNow;
 
         public FrmServer()
         {
@@ -50,8 +51,9 @@ namespace CocaroServer
             server = new TcpListener(IPserver, port);
             server.Start();
 
-            AppendTextToChatBox("Server is running at " + IPserver.ToString() + ":" + port + "");
-            AppendTextToChatBox("Waiting for clients...");
+            TimeNow = DateTime.Now;
+            AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") +" Server is running at " + IPserver.ToString() + ":" + port + "");
+            AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") +" Waiting for clients...");
 
             try
             {
@@ -59,14 +61,16 @@ namespace CocaroServer
                 {
                     var client = await server.AcceptTcpClientAsync();
                     clients.Add(client);
-                    AppendTextToChatBox("Client connected");
+                    TimeNow = DateTime.Now;
+                    AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client connected");
                     _ = Task.Run(() => ReceiveData(client));
                     Invoke(new Action(() => LblClientCount.Text = clients.Count.ToString()));
                 }
             }
             catch (ObjectDisposedException)
             {
-                AppendTextToChatBox("Server has been stopped.");
+                TimeNow = DateTime.Now;
+                AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + "Server has been stopped.");
             }
         }
 
@@ -82,11 +86,20 @@ namespace CocaroServer
                     if (bytesRead == 0)
                     {
                         Invoke(new Action(() => AppendTextToChatBox("Client disconnected")));
-                        Invoke(new Action(() => LblClientCount.Text = clients.Count.ToString()));// Update client count
                         break; // Client disconnected
                     }
                     string message = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                    Invoke(new Action(() => AppendTextToChatBox(message)));
+                    string[] arr = message.Split('|');
+                    if(arr[0] == "CHAT")
+                    {
+                        string chatMessage = arr[1];
+                        TimeNow = DateTime.Now;
+                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss")+" " + chatMessage)));
+                    }
+                    //else if
+                    //{
+
+                    //}
                 }
                 catch
                 {
@@ -95,20 +108,22 @@ namespace CocaroServer
             }
             clients.Remove(client);
             client.Close();
+            Invoke(new Action(() => LblClientCount.Text = clients.Count.ToString()));// Update client count
         }
 
         private void BtnSend_Click(object sender, EventArgs e)
         {
-            if (clients.Count == 0) return;
+            if (clients.Count == 0 || TxtChatBoxText.Text == "") return;
 
-            string message = TxtChatBoxText.Text;
+            TimeNow = DateTime.Now;
+            string message = $"CHAT|{"[Server]: "+TxtChatBoxText.Text}";
             byte[] data = Encoding.UTF8.GetBytes(message);
             foreach (var client in clients)
             {
                 NetworkStream stream = client.GetStream();
                 stream.Write(data, 0, data.Length);
             }
-            AppendTextToChatBox("Server: " + message);
+            AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " [Server]: " + TxtChatBoxText.Text);
             TxtChatBoxText.Clear();
         }
 
