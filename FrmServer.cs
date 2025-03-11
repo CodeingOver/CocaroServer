@@ -11,7 +11,7 @@ namespace CocaroServer
     public partial class FrmServer : Form
     {
         TcpListener server;
-        List<TcpClient> clients = new List<TcpClient>();
+        List<TcpClient> clients = new List<TcpClient>(3);
         DateTime TimeNow;
 
         public FrmServer()
@@ -60,6 +60,13 @@ namespace CocaroServer
                 while (true)
                 {
                     var client = await server.AcceptTcpClientAsync();
+                    if (clients.Count == 2)
+                    {
+                        client.Close();
+                        MessageBox.Show("Server đã đủ 2 người chơi", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        continue;
+                    }
+                    
                     clients.Add(client);
                     TimeNow = DateTime.Now;
                     AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client connected");
@@ -70,7 +77,7 @@ namespace CocaroServer
             catch (ObjectDisposedException)
             {
                 TimeNow = DateTime.Now;
-                AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + "Server has been stopped.");
+                AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Server has been stopped.");
             }
         }
 
@@ -85,24 +92,36 @@ namespace CocaroServer
                     int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                     if (bytesRead == 0)
                     {
-                        Invoke(new Action(() => AppendTextToChatBox("Client disconnected")));
+                        TimeNow = DateTime.Now;
+                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client disconnected")));
                         break; // Client disconnected
                     }
                     string message = Encoding.ASCII.GetString(buffer, 0, bytesRead);
                     string[] arr = message.Split('|');
                     if(arr[0] == "CHAT")
                     {
-                        string chatMessage = arr[1];
+                        string chatMessageName = arr[1];
+                        string chatMessage = arr[2];
                         TimeNow = DateTime.Now;
-                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss")+" " + chatMessage)));
+                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " [" + chatMessageName + "]: " + chatMessage)));
                     }
-                    //else if
-                    //{
+                    else if (arr[0] == "MOVE")
+                    {
+                        string chatMessageName = arr[1];
+                        int i = int.Parse(arr[2]);
+                        int j = int.Parse(arr[3]);
+                        string player = arr[4];
+                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " [" + chatMessageName + "]: " + "đã đánh ở ô [" +i+","+j+"]")));
+                        
+                        //Đồng bộ dữ liệu (đưa dữ liệu move cho client còn lại bỏ client gửi move ra)
 
-                    //}
+
+
+                    }
                 }
                 catch
                 {
+                    //MessageBox.Show(ex.Message);
                     break;
                 }
             }
@@ -116,7 +135,7 @@ namespace CocaroServer
             if (clients.Count == 0 || TxtChatBoxText.Text == "") return;
 
             TimeNow = DateTime.Now;
-            string message = $"CHAT|{"[Server]: "+TxtChatBoxText.Text}";
+            string message = "CHAT|Server|"+TxtChatBoxText.Text;
             byte[] data = Encoding.UTF8.GetBytes(message);
             foreach (var client in clients)
             {
