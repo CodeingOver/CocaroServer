@@ -10,8 +10,14 @@ namespace CocaroServer
 {
     public partial class FrmServer : Form
     {
+        public class ClientInfo
+        {
+            public TcpClient Client { get; set; }
+            public string EndPoint { get; set; }
+        }
+
         TcpListener server;
-        List<TcpClient> clients = new List<TcpClient>(3);
+        List<ClientInfo> clients = new List<ClientInfo>(3);
         DateTime TimeNow;
 
         public FrmServer()
@@ -52,8 +58,8 @@ namespace CocaroServer
             server.Start();
 
             TimeNow = DateTime.Now;
-            AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") +" Server is running at " + IPserver.ToString() + ":" + port + "");
-            AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") +" Waiting for clients...");
+            AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Server is running at " + IPserver.ToString() + ":" + port + "");
+            AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Waiting for clients...");
 
             try
             {
@@ -66,11 +72,17 @@ namespace CocaroServer
                         MessageBox.Show("Server đã đủ 2 người chơi", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         continue;
                     }
-                    
-                    clients.Add(client);
+
+                    var clientInfo = new ClientInfo
+                    {
+                        Client = client,
+                        EndPoint = client.Client.RemoteEndPoint.ToString()
+                    };
+                    clients.Add(clientInfo);
+
                     TimeNow = DateTime.Now;
-                    AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client connected");
-                    _ = Task.Run(() => ReceiveData(client));
+                    AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client connected: " + clientInfo.EndPoint);
+                    _ = Task.Run(() => ReceiveData(clientInfo));
                     Invoke(new Action(() => LblClientCount.Text = clients.Count.ToString()));
                 }
             }
@@ -81,9 +93,9 @@ namespace CocaroServer
             }
         }
 
-        private async Task ReceiveData(TcpClient client)
+        private async Task ReceiveData(ClientInfo clientInfo)
         {
-            NetworkStream stream = client.GetStream();
+            NetworkStream stream = clientInfo.Client.GetStream();
             byte[] buffer = new byte[1024];
             while (true)
             {
@@ -93,12 +105,15 @@ namespace CocaroServer
                     if (bytesRead == 0)
                     {
                         TimeNow = DateTime.Now;
-                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client disconnected")));
+                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client disconnected: " + clientInfo.EndPoint)));
                         break; // Client disconnected
                     }
                     string message = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                    AsyncDataReceived(clientInfo.EndPoint, message);
+
+
                     string[] arr = message.Split('|');
-                    if(arr[0] == "CHAT")
+                    if (arr[0] == "CHAT")
                     {
                         string chatMessageName = arr[1];
                         string chatMessage = arr[2];
@@ -111,23 +126,32 @@ namespace CocaroServer
                         int i = int.Parse(arr[2]);
                         int j = int.Parse(arr[3]);
                         string player = arr[4];
-                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " [" + chatMessageName + "]: " + "đã đánh ở ô [" +i+","+j+"]")));
-                        
-                        //Đồng bộ dữ liệu (đưa dữ liệu move cho client còn lại bỏ client gửi move ra)
-
-
+                        Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " [" + chatMessageName + "]: " + "đã đánh ở ô [" + i + "," + j + "]")));
 
                     }
                 }
                 catch
                 {
-                    //MessageBox.Show(ex.Message);
+                    // MessageBox.Show(ex.Message);
                     break;
                 }
             }
-            clients.Remove(client);
-            client.Close();
-            Invoke(new Action(() => LblClientCount.Text = clients.Count.ToString()));// Update client count
+            clients.Remove(clientInfo);
+            clientInfo.Client.Close();
+            Invoke(new Action(() => LblClientCount.Text = clients.Count.ToString())); // Update client count
+        }
+
+        private void AsyncDataReceived(string EndPoint, string Asysncdata)
+        {
+            foreach (var clientInfo in clients)
+            {
+                if (clientInfo.EndPoint != EndPoint)
+                {
+                    NetworkStream stream = clientInfo.Client.GetStream();
+                    byte[] data = Encoding.UTF8.GetBytes(Asysncdata);
+                    stream.Write(data, 0, data.Length);
+                }
+            }
         }
 
         private void BtnSend_Click(object sender, EventArgs e)
@@ -135,11 +159,11 @@ namespace CocaroServer
             if (clients.Count == 0 || TxtChatBoxText.Text == "") return;
 
             TimeNow = DateTime.Now;
-            string message = "CHAT|Server|"+TxtChatBoxText.Text;
+            string message = "CHAT|Server|" + TxtChatBoxText.Text;
             byte[] data = Encoding.UTF8.GetBytes(message);
             foreach (var client in clients)
             {
-                NetworkStream stream = client.GetStream();
+                NetworkStream stream = client.Client.GetStream(); // Fix: Access the NetworkStream from the TcpClient
                 stream.Write(data, 0, data.Length);
             }
             AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " [Server]: " + TxtChatBoxText.Text);
@@ -150,7 +174,7 @@ namespace CocaroServer
         {
             foreach (var client in clients)
             {
-                client.Close();
+                client.Client.Close();
             }
             clients.Clear();
             if (server != null)
@@ -174,6 +198,11 @@ namespace CocaroServer
                 BtnSend.PerformClick();
                 e.Handled = true;
             }
+        }
+
+        private void FrmServer_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            BtnClose_Click(sender, e);
         }
     }
 }
