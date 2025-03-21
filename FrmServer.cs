@@ -16,9 +16,11 @@ namespace CocaroServer
             public string EndPoint { get; set; }
         }
 
-        TcpListener server;
-        List<ClientInfo> clients = new List<ClientInfo>(3);
-        DateTime TimeNow;
+        private TcpListener server;
+        private List<ClientInfo> clients = new List<ClientInfo>(3);
+        private DateTime TimeNow;
+        private char Fristsymbol = ' ';
+        private int Fristturn = -1;
 
         public FrmServer()
         {
@@ -66,7 +68,7 @@ namespace CocaroServer
                 while (true)
                 {
                     var client = await server.AcceptTcpClientAsync();
-                    if (clients.Count == 2)
+                    if (clients.Count >= 2)
                     {
                         client.Close();
                         MessageBox.Show("Server đã đủ 2 người chơi", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -79,6 +81,65 @@ namespace CocaroServer
                         EndPoint = client.Client.RemoteEndPoint.ToString()
                     };
                     clients.Add(clientInfo);
+
+                    if(clients.Count == 1)
+                    {
+                        Random random = new Random();
+
+                        char[] symbols = { 'O', 'X' };
+
+                        char symbol = symbols[random.Next(symbols.Length)];
+                        int turn = random.Next(1, 2);
+
+                        Fristsymbol = symbol;
+                        Fristturn = turn;
+
+                        string message = "YOURTICK|"+ symbol+"|"+turn;
+
+                        byte[] data = Encoding.UTF8.GetBytes(message);
+                        NetworkStream stream = client.GetStream();
+
+                        stream.Write(data, 0, data.Length);
+                    }
+                    else if(clients.Count == 2)
+                    {
+                        if (Fristsymbol == 'O' && Fristturn == 1)
+                        {
+                            string message = "YOURTICK|X|2";
+                            byte[] data = Encoding.UTF8.GetBytes(message);
+                            NetworkStream stream = client.GetStream();
+                            stream.Write(data, 0, data.Length);
+                        }
+                        else if (Fristsymbol == 'X' && Fristturn == 1)
+                        {
+                            string message = "YOURTICK|O|2";
+                            byte[] data = Encoding.UTF8.GetBytes(message);
+                            NetworkStream stream = client.GetStream();
+                            stream.Write(data, 0, data.Length);
+                        }
+                        else if (Fristsymbol == 'O' && Fristturn == 2)
+                        {
+                            string message = "YOURTICK|X|1";
+                            byte[] data = Encoding.UTF8.GetBytes(message);
+                            NetworkStream stream = client.GetStream();
+                            stream.Write(data, 0, data.Length);
+                        }
+                        else if (Fristsymbol == 'X' && Fristturn == 2)
+                        {
+                            string message = "YOURTICK|O|1";
+                            byte[] data = Encoding.UTF8.GetBytes(message);
+                            NetworkStream stream = client.GetStream();
+                            stream.Write(data, 0, data.Length);
+                        }
+                    }
+
+                    foreach (var item in clients)
+                    {
+                        string message = "CLIENT|" + clients.Count;
+                        byte[] data = Encoding.UTF8.GetBytes(message);
+                        NetworkStream stream = item.Client.GetStream();
+                        stream.Write(data, 0, data.Length);
+                    }
 
                     TimeNow = DateTime.Now;
                     AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " Client connected: " + clientInfo.EndPoint);
@@ -127,7 +188,6 @@ namespace CocaroServer
                         int j = int.Parse(arr[3]);
                         string player = arr[4];
                         Invoke(new Action(() => AppendTextToChatBox(TimeNow.ToString("HH:mm:ss") + " [" + chatMessageName + "]: " + "đã đánh ở ô [" + i + "," + j + "]")));
-
                     }
                 }
                 catch
@@ -186,9 +246,14 @@ namespace CocaroServer
 
         private void AppendTextToChatBox(string text)
         {
-            TxtChatBox.AppendText(text + Environment.NewLine);
-            TxtChatBox.SelectionStart = TxtChatBox.Text.Length;
-            TxtChatBox.ScrollToCaret();
+            try
+            {
+                TxtChatBox.AppendText(text + Environment.NewLine);
+                TxtChatBox.SelectionStart = TxtChatBox.Text.Length;
+                TxtChatBox.ScrollToCaret();
+
+            }
+            catch(Exception ){}
         }
 
         private void TxtChatBoxText_KeyPress(object sender, KeyPressEventArgs e)
