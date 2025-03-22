@@ -82,63 +82,17 @@ namespace CocaroServer
                     };
                     clients.Add(clientInfo);
 
-                    if(clients.Count == 1)
+                    if(clients.Count == 2)
                     {
-                        Random random = new Random();
-
-                        char[] symbols = { 'O', 'X' };
-
-                        char symbol = symbols[random.Next(symbols.Length)];
-                        int turn = random.Next(1, 2);
-
-                        Fristsymbol = symbol;
-                        Fristturn = turn;
-
-                        string message = "YOURTICK|"+ symbol+"|"+turn;
-
-                        byte[] data = Encoding.UTF8.GetBytes(message);
-                        NetworkStream stream = client.GetStream();
-
-                        stream.Write(data, 0, data.Length);
-                    }
-                    else if(clients.Count == 2)
-                    {
-                        if (Fristsymbol == 'O' && Fristturn == 1)
+                        foreach (var item in clients)
                         {
-                            string message = "YOURTICK|X|2";
+                            string message = "CLIENT|" + clients.Count;
                             byte[] data = Encoding.UTF8.GetBytes(message);
-                            NetworkStream stream = client.GetStream();
+                            NetworkStream stream = item.Client.GetStream();
                             stream.Write(data, 0, data.Length);
                         }
-                        else if (Fristsymbol == 'X' && Fristturn == 1)
-                        {
-                            string message = "YOURTICK|O|2";
-                            byte[] data = Encoding.UTF8.GetBytes(message);
-                            NetworkStream stream = client.GetStream();
-                            stream.Write(data, 0, data.Length);
-                        }
-                        else if (Fristsymbol == 'O' && Fristturn == 2)
-                        {
-                            string message = "YOURTICK|X|1";
-                            byte[] data = Encoding.UTF8.GetBytes(message);
-                            NetworkStream stream = client.GetStream();
-                            stream.Write(data, 0, data.Length);
-                        }
-                        else if (Fristsymbol == 'X' && Fristturn == 2)
-                        {
-                            string message = "YOURTICK|O|1";
-                            byte[] data = Encoding.UTF8.GetBytes(message);
-                            NetworkStream stream = client.GetStream();
-                            stream.Write(data, 0, data.Length);
-                        }
-                    }
 
-                    foreach (var item in clients)
-                    {
-                        string message = "CLIENT|" + clients.Count;
-                        byte[] data = Encoding.UTF8.GetBytes(message);
-                        NetworkStream stream = item.Client.GetStream();
-                        stream.Write(data, 0, data.Length);
+                        Gamestart();
                     }
 
                     TimeNow = DateTime.Now;
@@ -199,6 +153,14 @@ namespace CocaroServer
             clients.Remove(clientInfo);
             clientInfo.Client.Close();
             Invoke(new Action(() => LblClientCount.Text = clients.Count.ToString())); // Update client count
+
+            if (clients.Count == 1)
+            {
+                string message = "CLIENT|" + clients.Count;
+                byte[] data = Encoding.UTF8.GetBytes(message);
+                NetworkStream stream1 = clients[0].Client.GetStream();
+                stream1.Write(data, 0, data.Length);
+            }
         }
 
         private void AsyncDataReceived(string EndPoint, string Asysncdata)
@@ -212,6 +174,37 @@ namespace CocaroServer
                     stream.Write(data, 0, data.Length);
                 }
             }
+        }
+
+        private async void Gamestart()
+        {
+            if (clients.Count < 2)
+            {
+                MessageBox.Show("Chưa đủ người chơi", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            await Task.Delay(3000);
+
+            Random random = new Random();
+            char[] symbols = { 'O', 'X' };
+            char symbol = symbols[random.Next(symbols.Length)];
+            int turn = random.Next(1, 3);
+
+            Fristsymbol = symbol;
+            Fristturn = turn;
+
+            string message1 = "YOURTICK|" + symbol + "|" + turn;
+            string message2 = "YOURTICK|" + (symbol == 'O' ? 'X' : 'O') + "|" + (turn == 1 ? 2 : 1);
+
+            byte[] data1 = Encoding.UTF8.GetBytes(message1);
+            byte[] data2 = Encoding.UTF8.GetBytes(message2);
+
+            NetworkStream stream1 = clients[0].Client.GetStream();
+            NetworkStream stream2 = clients[1].Client.GetStream();
+
+            stream1.Write(data1, 0, data1.Length);
+            stream2.Write(data2, 0, data2.Length);
         }
 
         private void BtnSend_Click(object sender, EventArgs e)
